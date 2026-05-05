@@ -72,12 +72,11 @@ PROVIDER_INFO: dict[str, ProviderInfo] = {
     "glm": {
         "label": "Zhipu GLM (z.ai)",
         "default_base_url": "https://open.bigmodel.cn/api/paas/v4",
-        "default_model": "zai/glm-5",
+        "default_model": "zai/glm-5.1",
         "available_models": [
-            # GLM-5 series (latest, requires zai/ prefix)
+            "zai/glm-5.1",
             "zai/glm-5",
             "zai/glm-5-turbo",
-            # GLM-4 series (standard, zai/ prefix)
             "zai/glm-4",
             "zai/glm-4-plus",
             "zai/glm-4-air",
@@ -85,7 +84,6 @@ PROVIDER_INFO: dict[str, ProviderInfo] = {
             "zai/glm-4.5",
             "zai/glm-4.6",
             "zai/glm-4.7",
-            # GLM-3 series (legacy)
             "zai/glm-3-turbo",
         ],
     },
@@ -94,16 +92,49 @@ PROVIDER_INFO: dict[str, ProviderInfo] = {
         "default_base_url": "https://api.minimaxi.com/anthropic",
         "default_model": "MiniMax-M2.7",
         "available_models": [
-            # M2 series (latest)
             "MiniMax-M2.7",
             "MiniMax-M2.7-highspeed",
             "MiniMax-M2.5",
             "MiniMax-M2.5-highspeed",
             "M2-her",
-            # Historical
             "MiniMax-M2.1",
             "MiniMax-M2.1-highspeed",
             "MiniMax-M2",
+        ],
+    },
+    "qwen": {
+        "label": "Qwen (通义千问)",
+        "default_base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "default_model": "qwen3.6-plus",
+        "available_models": [
+            "qwen3.6-plus",
+            "qwen3.6-plus-2026-04-02",
+            "qwen3.6-35b-a3b",
+            "qwen3.6-flash-2026-04-16",
+            "qwen3.5-flash",
+            "qwen3.5-35b-a3b",
+            "qwen3-coder-next",
+            "qwen-plus",
+            "qwen-turbo",
+            "qwen-max",
+            "qwen-max-longcontext",
+            "qwen-long",
+            "qwen2.5-72b-instruct",
+            "qwen2.5-32b-instruct",
+            "qwen2.5-14b-instruct",
+            "qwen2.5-7b-instruct",
+        ],
+    },
+    "deepseek": {
+        "label": "DeepSeek",
+        "default_base_url": "https://api.deepseek.com",
+        "default_model": "deepseek-v4-pro",
+        "available_models": [
+            "deepseek-v4-pro",
+            "deepseek-v4-flash",
+            "deepseek-chat",
+            "deepseek-coder",
+            "deepseek-reasoner",
         ],
     },
 }
@@ -134,6 +165,14 @@ def get_provider_class(provider_name: str):
         from .minimax_provider import MinimaxProvider
 
         return MinimaxProvider
+    if provider_name == "qwen":
+        from .qwen_provider import QwenProvider
+
+        return QwenProvider
+    if provider_name == "deepseek":
+        from .deepseek_provider import DeepSeekProvider
+
+        return DeepSeekProvider
     raise ValueError(f"Unknown provider: {provider_name}")
 
 
