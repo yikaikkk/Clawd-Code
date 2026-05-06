@@ -21,12 +21,18 @@ def _env_value(config: dict[str, Any]) -> str:
         value = os.environ.get(env_name, "")
         if value:
             return value
+        if _looks_like_api_key(env_name):
+            return env_name
     api_key = config.get("api_key")
     return api_key if isinstance(api_key, str) else ""
 
 
 def _strip_empty(values: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in values.items() if v not in ("", None)}
+
+
+def _looks_like_api_key(value: str) -> bool:
+    return value.startswith(("sk-", "sk_", "ak-", "ak_"))
 
 
 def _redact_sensitive(value: Any) -> Any:
@@ -111,6 +117,9 @@ class MemoryService:
         suffix = f" {details}" if details else ""
         print(f"[clawd:memory] {message}{suffix}", file=sys.stderr)
 
+    def _debug_error(self, operation: str, exc: Exception | str) -> None:
+        self._debug(f"{operation} error", error=str(exc))
+
     def search_prompt(self, query: str) -> str:
         if not self.enabled:
             self._debug("search skipped", reason="memory disabled")
@@ -163,7 +172,7 @@ class MemoryService:
             return memories
         except Exception as exc:
             self._disabled_reason = str(exc)
-            self._debug("search failed", error=self._disabled_reason)
+            self._debug_error("search", exc)
             return []
 
     def add_turn(self, user_input: str, assistant_output: str) -> None:
@@ -212,7 +221,7 @@ class MemoryService:
             self._debug("write succeeded")
         except Exception as exc:
             self._disabled_reason = str(exc)
-            self._debug("write failed", error=self._disabled_reason)
+            self._debug_error("write", exc)
 
     def _get_client(self) -> Any | None:
         if self._client is not None:
