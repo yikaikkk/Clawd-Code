@@ -166,6 +166,34 @@ class TestAgentLoop(unittest.TestCase):
         self.assertEqual(conversation.messages[-1].role, "assistant")
         self.assertEqual(conversation.messages[-1].content, "Hello from Clawd!")
 
+    def test_agent_loop_injects_memory_context_into_system_prompt(self):
+        """Memory context is added to the first provider call."""
+        conversation = Conversation()
+        conversation.add_user_message("Say hello")
+
+        mock_provider = MagicMock()
+        mock_provider.chat_stream_response.side_effect = NotImplementedError()
+        mock_provider.chat.return_value = ChatResponse(
+            content="Hello!",
+            model="test-model",
+            usage=None,
+            finish_reason="stop",
+            tool_uses=None,
+        )
+
+        run_agent_loop(
+            conversation=conversation,
+            provider=mock_provider,
+            tool_registry=self.registry,
+            tool_context=self.context,
+            memory_context="Relevant long-term memory:\n- User likes concise answers.",
+            verbose=False,
+        )
+
+        messages = mock_provider.chat.call_args.args[0]
+        self.assertEqual(messages[0]["role"], "system")
+        self.assertIn("User likes concise answers.", messages[0]["content"])
+
     def test_agent_loop_stream_only_emits_final_turn_text(self):
         """Streaming mode skips interim tool-planning text and emits the final answer only."""
         conversation = Conversation()

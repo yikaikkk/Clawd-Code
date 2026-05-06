@@ -33,6 +33,43 @@ def _get_default_config_from_providers() -> dict[str, Any]:
         "session": {
             "auto_save": True,
             "max_history": 100
+        },
+        "memory": {
+            "enabled": False,
+            "provider": "mem0_oss",
+            "user_id": "default",
+            "agent_id": "clawd-code",
+            "scope": "workspace",
+            "search_limit": 5,
+            "inject": True,
+            "write_after_turn": True,
+            "enable_graph": True,
+            "chroma": {
+                "collection_name": "clawd_code_memory",
+                "path": "~/.clawd/memory/chroma",
+                "host": "",
+                "port": None,
+            },
+            "neo4j": {
+                "url": "bolt://localhost:7687",
+                "username": "neo4j",
+                "password": "",
+                "database": "neo4j",
+                "threshold": 0.75,
+            },
+            "llm": {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "temperature": 0.1,
+                "api_key_env": "OPENAI_API_KEY",
+                "base_url": "",
+            },
+            "embedder": {
+                "provider": "openai",
+                "model": "text-embedding-3-small",
+                "api_key_env": "OPENAI_API_KEY",
+                "base_url": "",
+            },
         }
     }
 

@@ -73,7 +73,8 @@ import json
 from typing import Any
 
 from src.agent import Session
-from src.config import get_provider_config
+from src.config import get_provider_config, load_config
+from src.memory import MemoryService
 from src.outputStyles import resolve_output_style
 from src.providers import get_provider_class
 from src.providers.anthropic_provider import AnthropicProvider
@@ -107,7 +108,8 @@ class ClawdREPL:
         self.multiline_mode = False
 
         # Load configuration
-        config = get_provider_config(provider_name)
+        app_config = load_config()
+        config = app_config.get("providers", {}).get(provider_name) or get_provider_config(provider_name)
         if not config.get("api_key"):
             self.console.print("[red]Error: API key not configured.[/red]")
             self.console.print("Run [bold]clawd login[/bold] to configure.")
@@ -125,6 +127,11 @@ class ClawdREPL:
         self.session = Session.create(
             provider_name,
             self.provider.model
+        )
+        self.memory_service = MemoryService(
+            app_config.get("memory", {}),
+            workspace_root=Path.cwd(),
+            session_id=getattr(self.session, "session_id", None),
         )
 
         self.tool_registry = build_default_registry()
@@ -1021,22 +1028,25 @@ class ClawdREPL:
     def _provider_uses_system_kwarg(self) -> bool:
         return isinstance(self.provider, (AnthropicProvider, MinimaxProvider))
 
-    def _build_direct_stream_payload(self) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    def _build_direct_stream_payload(self, memory_context: str = "") -> tuple[list[dict[str, Any]], dict[str, Any]]:
         style_name = getattr(self.tool_context, "output_style_name", None)
         style_dir = getattr(self.tool_context, "output_style_dir", None)
         style_prompt = resolve_output_style(style_name, style_dir).prompt
+        system_prompt = "\n\n".join(
+            part.strip() for part in (style_prompt, memory_context) if part and part.strip()
+        )
 
         if self._provider_uses_system_kwarg():
             return self.session.conversation.get_messages(), (
-                {"system": style_prompt} if style_prompt.strip() else {}
+                {"system": system_prompt} if system_prompt.strip() else {}
             )
 
         messages: list[dict[str, Any]] = []
         for msg in self.session.conversation.messages:
             if isinstance(msg.content, str):
                 messages.append({"role": msg.role, "content": msg.content})
-        if style_prompt.strip():
-            messages = [{"role": "system", "content": style_prompt}, *messages]
+        if system_prompt.strip():
+            messages = [{"role": "system", "content": system_prompt}, *messages]
         return messages, {}
 
     def _should_try_direct_stream(self, user_input: str) -> bool:
@@ -1061,11 +1071,11 @@ class ClawdREPL:
         )
         return not any(marker in text for marker in code_task_markers)
 
-    def _stream_direct_response(self, on_text_chunk=None) -> str | None:
+    def _stream_direct_response(self, on_text_chunk=None, memory_context: str = "") -> str | None:
         streamed_chunks: list[str] = []
 
         try:
-            api_messages, call_kwargs = self._build_direct_stream_payload()
+            api_messages, call_kwargs = self._build_direct_stream_payload(memory_context)
             stream_iter = self.provider.chat_stream(api_messages, tools=None, **call_kwargs)
             for chunk in stream_iter:
                 if not chunk:
@@ -1124,6 +1134,11 @@ class ClawdREPL:
         """
         # Add user message
         self.session.conversation.add_user_message(user_input)
+        memory_context = ""
+        try:
+            memory_context = self.memory_service.search_prompt(user_input)
+        except Exception:
+            memory_context = ""
 
         try:
             self.console.print("\n[bold]Assistant[/bold]")
@@ -1177,9 +1192,16 @@ class ClawdREPL:
             if self._should_try_direct_stream(user_input):
                 self._current_status = self.console.status("[dim]Thinking...[/dim]", spinner="dots")
                 with self._current_status:
-                    direct_response = self._stream_direct_response(on_text_chunk=on_text_chunk)
+                    direct_response = self._stream_direct_response(
+                        on_text_chunk=on_text_chunk,
+                        memory_context=memory_context,
+                    )
                 self._current_status = None
                 if direct_response is not None:
+                    try:
+                        self.memory_service.add_turn(user_input, direct_response)
+                    except Exception:
+                        pass
                     self.console.print("\n")
                     return
 
@@ -1196,6 +1218,7 @@ class ClawdREPL:
                     verbose=False,
                     on_event=on_event,
                     on_text_chunk=on_text_chunk if self.stream else None,
+                    memory_context=memory_context,
                 )
             self._current_status = None
 
@@ -1218,6 +1241,10 @@ class ClawdREPL:
             else:
                 self.console.print(Markdown(result.response_text))
                 self.console.print("\n")
+            try:
+                self.memory_service.add_turn(user_input, result.response_text)
+            except Exception:
+                pass
 
         except Exception as e:
             error_str = str(e)

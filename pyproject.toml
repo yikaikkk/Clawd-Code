@@ -31,6 +31,9 @@ dependencies = [
     "rich",
     "prompt-toolkit",
     "tiktoken>=0.7.0",
+    "mem0ai",
+    "chromadb",
+    "neo4j",
 ]
 
 [project.optional-dependencies]

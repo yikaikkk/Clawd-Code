@@ -166,7 +166,7 @@ def _call_provider_for_turn(
     return response, False
 
 
-def _build_effective_system_prompt(style_prompt: str, tool_context: ToolContext) -> str:
+def _build_effective_system_prompt(style_prompt: str, tool_context: ToolContext, memory_context: str = "") -> str:
     try:
         context_prompt = build_context_prompt(
             tool_context.workspace_root,
@@ -174,9 +174,8 @@ def _build_effective_system_prompt(style_prompt: str, tool_context: ToolContext)
         )
     except Exception:
         context_prompt = ""
-    if not context_prompt.strip():
-        return style_prompt
-    return f"{style_prompt}\n\n{context_prompt}"
+    parts = [part.strip() for part in (style_prompt, context_prompt, memory_context) if part and part.strip()]
+    return "\n\n".join(parts)
 
 
 def summarize_tool_use(name: str, tool_input: dict[str, Any]) -> str:
@@ -247,6 +246,7 @@ def run_agent_loop(
     verbose: bool = False,
     on_event: ToolEventHandler | None = None,
     on_text_chunk: TextChunkHandler | None = None,
+    memory_context: str = "",
 ) -> AgentLoopResult:
     """Run agent loop: LLM -> tools -> LLM until no more tools or max turns.
 
@@ -279,7 +279,7 @@ def run_agent_loop(
     style_name = getattr(tool_context, "output_style_name", None)
     style_dir = getattr(tool_context, "output_style_dir", None)
     style_prompt = resolve_output_style(style_name, style_dir).prompt
-    effective_system_prompt = _build_effective_system_prompt(style_prompt, tool_context)
+    effective_system_prompt = _build_effective_system_prompt(style_prompt, tool_context, memory_context)
 
     # Seed OpenAI messages from initial conversation messages
     for msg in conversation.messages:
