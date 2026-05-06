@@ -278,7 +278,7 @@ class MemoryService:
             "model": llm.get("model"),
             "temperature": llm.get("temperature"),
             "api_key": _env_value(llm),
-            "base_url": llm.get("base_url"),
+            "openai_base_url": llm.get("openai_base_url"),
         })
         if llm.get("provider"):
             mem0_config["llm"] = {"provider": llm.get("provider"), "config": llm_config}
@@ -286,7 +286,7 @@ class MemoryService:
         embedder_config = _strip_empty({
             "model": embedder.get("model"),
             "api_key": _env_value(embedder),
-            "base_url": embedder.get("base_url"),
+            "openai_base_url": embedder.get("openai_base_url"),
         })
         if embedder.get("provider"):
             mem0_config["embedder"] = {"provider": embedder.get("provider"), "config": embedder_config}
