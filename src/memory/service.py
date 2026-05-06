@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,20 @@ def _env_value(config: dict[str, Any]) -> str:
 
 def _strip_empty(values: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in values.items() if v not in ("", None)}
+
+
+def _redact_sensitive(value: Any) -> Any:
+    if isinstance(value, dict):
+        redacted: dict[str, Any] = {}
+        for key, item in value.items():
+            if key.lower() in {"api_key", "password", "token", "secret"}:
+                redacted[key] = "<redacted>" if item else item
+            else:
+                redacted[key] = _redact_sensitive(item)
+        return redacted
+    if isinstance(value, list):
+        return [_redact_sensitive(item) for item in value]
+    return value
 
 
 def format_memories_for_prompt(memories: list[dict[str, Any]]) -> str:
@@ -66,26 +81,73 @@ class MemoryService:
         self.project_id = _project_id(self.workspace_root)
         self._client: Any | None = None
         self._disabled_reason: str | None = None
+        self._debug(
+            "initialized",
+            enabled=self.enabled,
+            inject=bool(self.config.get("inject", True)),
+            write_after_turn=bool(self.config.get("write_after_turn", True)),
+            workspace_root=str(self.workspace_root),
+            session_id=self.session_id or "",
+        )
 
     @property
     def enabled(self) -> bool:
         return bool(self.config.get("enabled"))
 
+    @property
+    def debug_enabled(self) -> bool:
+        return bool(self.config.get("debug"))
+
+    @property
+    def disabled_reason(self) -> str | None:
+        return self._disabled_reason
+
+    def _debug(self, message: str, **fields: Any) -> None:
+        if not self.debug_enabled:
+            return
+        details = " ".join(
+            f"{key}={_redact_sensitive(value)!r}" for key, value in fields.items()
+        )
+        suffix = f" {details}" if details else ""
+        print(f"[clawd:memory] {message}{suffix}", file=sys.stderr)
+
     def search_prompt(self, query: str) -> str:
-        if not self.enabled or not bool(self.config.get("inject", True)):
+        if not self.enabled:
+            self._debug("search skipped", reason="memory disabled")
+            return ""
+        if not bool(self.config.get("inject", True)):
+            self._debug("search skipped", reason="memory injection disabled")
             return ""
         memories = self.search(query)
-        return format_memories_for_prompt(memories)
+        prompt = format_memories_for_prompt(memories)
+        self._debug(
+            "search prompt built",
+            memories=len(memories),
+            injected=bool(prompt),
+        )
+        return prompt
 
     def search(self, query: str) -> list[dict[str, Any]]:
-        if not self.enabled or not query.strip():
+        if not self.enabled:
+            self._debug("search skipped", reason="memory disabled")
+            return []
+        if not query.strip():
+            self._debug("search skipped", reason="empty query")
             return []
         client = self._get_client()
         if client is None:
+            self._debug("search skipped", reason=self._disabled_reason or "client unavailable")
             return []
         try:
             limit = int(self.config.get("search_limit") or 5)
             filters = {"user_id": self.user_id}
+            self._debug(
+                "search started",
+                query_chars=len(query),
+                limit=limit,
+                user_id=self.user_id,
+                enable_graph=bool(self.config.get("enable_graph", True)),
+            )
             try:
                 result = client.search(
                     query=query,
@@ -96,18 +158,27 @@ class MemoryService:
                 )
             except TypeError:
                 result = client.search(query=query, user_id=self.user_id, limit=limit, filters=filters)
-            return self._normalize_results(result)
+            memories = self._normalize_results(result)
+            self._debug("search succeeded", memories=len(memories))
+            return memories
         except Exception as exc:
             self._disabled_reason = str(exc)
+            self._debug("search failed", error=self._disabled_reason)
             return []
 
     def add_turn(self, user_input: str, assistant_output: str) -> None:
-        if not self.enabled or not bool(self.config.get("write_after_turn", True)):
+        if not self.enabled:
+            self._debug("write skipped", reason="memory disabled")
+            return
+        if not bool(self.config.get("write_after_turn", True)):
+            self._debug("write skipped", reason="memory writes disabled")
             return
         if not user_input.strip() or not assistant_output.strip():
+            self._debug("write skipped", reason="empty turn")
             return
         client = self._get_client()
         if client is None:
+            self._debug("write skipped", reason=self._disabled_reason or "client unavailable")
             return
         messages = [
             {"role": "user", "content": user_input},
@@ -119,6 +190,15 @@ class MemoryService:
             "session_id": self.session_id or "",
         }
         try:
+            self._debug(
+                "write started",
+                user_chars=len(user_input),
+                assistant_chars=len(assistant_output),
+                user_id=self.user_id,
+                agent_id=self.agent_id,
+                project_id=self.project_id,
+                enable_graph=bool(self.config.get("enable_graph", True)),
+            )
             try:
                 client.add(
                     messages,
@@ -129,28 +209,36 @@ class MemoryService:
                 )
             except TypeError:
                 client.add(messages, user_id=self.user_id, agent_id=self.agent_id, metadata=metadata)
+            self._debug("write succeeded")
         except Exception as exc:
             self._disabled_reason = str(exc)
+            self._debug("write failed", error=self._disabled_reason)
 
     def _get_client(self) -> Any | None:
         if self._client is not None:
+            self._debug("client reused")
             return self._client
         if not self.enabled:
+            self._debug("client not initialized", reason="memory disabled")
             return None
         try:
             from mem0 import Memory  # type: ignore
         except Exception as exc:
             self._disabled_reason = f"mem0 import failed: {exc}"
+            self._debug("client import failed", error=self._disabled_reason)
             return None
         try:
             mem0_config = self._build_mem0_config()
+            self._debug("client initialization started", config=_redact_sensitive(mem0_config))
             try:
                 self._client = Memory.from_config(config_dict=mem0_config)
             except TypeError:
                 self._client = Memory.from_config(mem0_config)
+            self._debug("client initialization succeeded")
             return self._client
         except Exception as exc:
             self._disabled_reason = str(exc)
+            self._debug("client initialization failed", error=self._disabled_reason)
             return None
 
     def _build_mem0_config(self) -> dict[str, Any]:

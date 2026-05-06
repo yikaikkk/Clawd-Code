@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import os
+import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr
+from io import StringIO
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from src.memory.service import MemoryService, format_memories_for_prompt
@@ -75,3 +79,44 @@ class TestMemoryService(unittest.TestCase):
             self.assertEqual(service.search("hello"), [])
             service.add_turn("hello", "world")
             self.assertIsNone(service._client)
+
+    def test_debug_disabled_does_not_print_memory_diagnostics(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            stderr = StringIO()
+            with redirect_stderr(stderr):
+                service = MemoryService({"enabled": False, "debug": False}, workspace_root=Path(temp_dir))
+                service.search("hello")
+
+        self.assertEqual(stderr.getvalue(), "")
+
+    def test_debug_enabled_prints_client_load_status_without_secrets(self):
+        class FakeClient:
+            def search(self, **kwargs):
+                return [{"memory": "User prefers concise answers."}]
+
+        class FakeMemory:
+            @staticmethod
+            def from_config(*args, **kwargs):
+                return FakeClient()
+
+        fake_mem0 = SimpleNamespace(Memory=FakeMemory)
+        config = {
+            "enabled": True,
+            "debug": True,
+            "enable_graph": False,
+            "llm": {"provider": "openai", "api_key": "sk-secret"},
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            stderr = StringIO()
+            with patch.dict(sys.modules, {"mem0": fake_mem0}):
+                with redirect_stderr(stderr):
+                    service = MemoryService(config, workspace_root=Path(temp_dir))
+                    memories = service.search("hello")
+
+        output = stderr.getvalue()
+        self.assertEqual(len(memories), 1)
+        self.assertIn("[clawd:memory] client initialization succeeded", output)
+        self.assertIn("[clawd:memory] search succeeded", output)
+        self.assertIn("<redacted>", output)
+        self.assertNotIn("sk-secret", output)

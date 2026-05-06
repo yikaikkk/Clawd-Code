@@ -36,6 +36,7 @@ def _get_default_config_from_providers() -> dict[str, Any]:
         },
         "memory": {
             "enabled": False,
+            "debug": True,
             "provider": "mem0_oss",
             "user_id": "default",
             "agent_id": "clawd-code",

@@ -59,6 +59,7 @@ class TestDefaultConfig(unittest.TestCase):
         self.assertIn("anthropic", config["providers"])
         self.assertIn("openai", config["providers"])
         self.assertIn("glm", config["providers"])
+        self.assertFalse(config["memory"]["debug"])
 
     def test_default_provider_is_anthropic(self):
         """Test that default provider is Anthropic."""
