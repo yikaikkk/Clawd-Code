@@ -44,7 +44,7 @@ _DEFAULT_LONG_TERM_KEYWORDS = frozenset([
     "我擅长", "我熟悉", "我精通", "我了解", "我学习过",
     "我的目标", "我的计划", "我想", "我希望", "我打算",
     "我的需求", "我的要求", "我需要", "我想要", "我的偏好",
-    "我的习惯", "我的风格", "我喜欢", "我不喜欢",
+    "我的习惯", "我的风格", "我喜欢", "我不喜欢","喜欢","偏好","习惯"
     # 长期目标相关
     "长期", "计划", "规划", "目标", "愿景", "战略", "方向",
     "未来", "以后", "将来", "接下来", "准备", "打算",
@@ -62,7 +62,7 @@ _DEFAULT_EXTRACTION_PROMPT = """
 请以简洁、结构化的方式输出，只保留关键信息，格式如下：
 
 用户画像: 
-- 身份背景（职业、学历、专业等）
+- 身份背景（职业、学历、专业、名字、爱好等）
 - 技能专长
 - 偏好习惯
 
@@ -246,9 +246,9 @@ class MemoryService:
             if _contains_long_term_keywords(user_input, keywords):
                 self._debug("memory qualifies for long-term", reason="user input contains long-term keywords")
                 return True
-            if _contains_long_term_keywords(assistant_output, keywords):
-                self._debug("memory qualifies for long-term", reason="assistant output contains long-term keywords")
-                return True
+            # if _contains_long_term_keywords(assistant_output, keywords):
+            #     self._debug("memory qualifies for long-term", reason="assistant output contains long-term keywords")
+            #     return True
             
             self._debug("write skipped", reason="does not contain long-term keywords")
             return False
@@ -300,7 +300,7 @@ class MemoryService:
             # 构建提炼prompt
             prompt = extraction_prompt.format(
                 user_input=user_input,
-                assistant_output=assistant_output
+                # assistant_output=assistant_output
             )
             
             self._debug("extraction started", prompt_chars=len(prompt))
