@@ -57,7 +57,6 @@ _DEFAULT_EXTRACTION_PROMPT = """
 请从以下对话中提取并总结用户画像和长期目标相关的核心信息：
 
 用户输入: {user_input}
-助手回复: {assistant_output}
 
 请以简洁、结构化的方式输出，只保留关键信息，格式如下：
 
