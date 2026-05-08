@@ -655,8 +655,10 @@ class ClawdREPL:
                 self.multiline_mode = False
                 continue
             except EOFError:
-                self.session.save()
-                self.console.print(f"\n[green]Session saved: {self.session.session_id}[/green]")
+                # Only save if there are messages in the conversation
+                if self.session.conversation and self.session.conversation.messages:
+                    self.session.save()
+                    self.console.print(f"\n[green]Session saved: {self.session.session_id}[/green]")
                 self.console.print("[blue]Goodbye![/blue]")
                 break
 
@@ -747,8 +749,10 @@ class ClawdREPL:
         cmd = raw.lower()
 
         if cmd in ['/exit', '/quit', '/q']:
-            self.session.save()
-            self.console.print(f"[green]Session saved: {self.session.session_id}[/green]")
+            # Only save if there are messages in the conversation
+            if self.session.conversation and self.session.conversation.messages:
+                self.session.save()
+                self.console.print(f"[green]Session saved: {self.session.session_id}[/green]")
             self.console.print("[blue]Goodbye![/blue]")
             sys.exit(0)
 
