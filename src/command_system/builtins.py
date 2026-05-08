@@ -454,6 +454,88 @@ def compact_command_call(args: str, context: CommandContext) -> LocalCommandResu
             return _sync_compact_fallback(context)
 
 
+def resume_command_call(args: str, context: CommandContext) -> LocalCommandResult:
+    """
+    Handle /resume command - List saved sessions with message previews.
+
+    Args:
+        args: Command arguments
+        context: Command context
+
+    Returns:
+        LocalCommandResult
+    """
+    import json
+    
+    sessions_dir = Path.home() / ".clawd" / "sessions"
+    
+    if not sessions_dir.exists():
+        return LocalCommandResult(type="text", value="No saved sessions found.")
+    
+    session_files = sorted(sessions_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    
+    if not session_files:
+        return LocalCommandResult(type="text", value="No saved sessions found.")
+    
+    results = []
+    for session_file in session_files[:20]:  # Limit to 20 recent sessions
+        try:
+            with open(session_file, 'r') as f:
+                data = json.load(f)
+            
+            session_id = data.get("session_id", "")
+            provider = data.get("provider", "unknown")
+            model = data.get("model", "unknown")
+            created_at = data.get("created_at", "")
+            
+            # Get first user message preview
+            preview = ""
+            conversation = data.get("conversation", {})
+            messages = conversation.get("messages", [])
+            
+            for msg in messages:
+                if msg.get("role") == "user":
+                    content = msg.get("content", "")
+                    # Extract first 100 characters as preview
+                    preview = content[:100]
+                    if len(content) > 100:
+                        preview += "..."
+                    break
+            
+            results.append({
+                "session_id": session_id,
+                "provider": provider,
+                "model": model,
+                "created_at": created_at,
+                "preview": preview
+            })
+        except Exception as e:
+            results.append({
+                "session_id": session_file.stem,
+                "provider": "error",
+                "model": str(e),
+                "created_at": "",
+                "preview": ""
+            })
+    
+    if not results:
+        return LocalCommandResult(type="text", value="No valid sessions found.")
+    
+    # Format output
+    output_lines = ["Saved Sessions:"]
+    for i, sess in enumerate(results, 1):
+        created_str = sess["created_at"].replace("T", " ")[:19] if sess["created_at"] else ""
+        output_lines.append(f"\n{i}. [bold]{sess['session_id']}[/bold]")
+        output_lines.append(f"   Provider: {sess['provider']}")
+        output_lines.append(f"   Model: {sess['model']}")
+        if created_str:
+            output_lines.append(f"   Created: {created_str}")
+        if sess["preview"]:
+            output_lines.append(f"   Preview: {sess['preview']}")
+    
+    return LocalCommandResult(type="text", value="\n".join(output_lines))
+
+
 def _sync_compact_fallback(context: CommandContext) -> LocalCommandResult:
     """Synchronous fallback when async provider is not available."""
     if not hasattr(context.conversation, "messages"):
@@ -598,6 +680,13 @@ CONTEXT_COMMAND = LocalCommand(
     supports_non_interactive=True,
 )
 
+RESUME_COMMAND = LocalCommand(
+    name="resume",
+    description="List saved sessions with message previews",
+    argument_hint="",
+    supports_non_interactive=True,
+)
+
 COMPACT_COMMAND = LocalCommand(
     name="compact",
     description="Compact conversation to save context space",
@@ -649,6 +738,8 @@ def execute_command_sync(cmd_name: str, args: str, context: CommandContext) -> t
             result = context_command_call(args, context)
         elif cmd is COMPACT_COMMAND:
             result = compact_command_call(args, context)
+        elif cmd is RESUME_COMMAND:
+            result = resume_command_call(args, context)
         else:
             return False, None, f"Command not implemented for sync execution: {cmd_name}"
 
@@ -665,6 +756,7 @@ SKILLS_COMMAND.set_call(skills_command_call)
 COST_COMMAND.set_call(cost_command_call)
 CONTEXT_COMMAND.set_call(context_command_call)
 COMPACT_COMMAND.set_call(compact_command_call)
+RESUME_COMMAND.set_call(resume_command_call)
 
 
 def get_builtin_commands() -> list[Command]:
@@ -677,6 +769,7 @@ def get_builtin_commands() -> list[Command]:
         COST_COMMAND,
         CONTEXT_COMMAND,
         COMPACT_COMMAND,
+        RESUME_COMMAND,
         INIT_COMMAND,
     ]
 

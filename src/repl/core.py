@@ -655,7 +655,9 @@ class ClawdREPL:
                 self.multiline_mode = False
                 continue
             except EOFError:
-                self.console.print("\n[blue]Goodbye![/blue]")
+                self.session.save()
+                self.console.print(f"\n[green]Session saved: {self.session.session_id}[/green]")
+                self.console.print("[blue]Goodbye![/blue]")
                 break
 
     def handle_command(self, command: str):
@@ -745,6 +747,8 @@ class ClawdREPL:
         cmd = raw.lower()
 
         if cmd in ['/exit', '/quit', '/q']:
+            self.session.save()
+            self.console.print(f"[green]Session saved: {self.session.session_id}[/green]")
             self.console.print("[blue]Goodbye![/blue]")
             sys.exit(0)
 
