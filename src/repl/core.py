@@ -966,6 +966,7 @@ class ClawdREPL:
 - `/init` - Create CLAUDE.md file for the project
 - `/cost` - Show session cost and usage
 - `/compact` - Compact conversation to save context space
+- `/resume` - List saved sessions with message previews
 
 **Usage:**
 - Type your message and press Enter to chat
